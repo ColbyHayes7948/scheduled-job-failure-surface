@@ -1,13 +1,13 @@
 # Make a scheduled job failure visible
 
-Infrai uses one key for every capability, and you make a plain REST call from any language with no SDK. Run the example with an Infrai key in the environment:
+Run the example with an Infrai key in the environment:
 
 ```bash
 export INFRAI_API_KEY=your-key
 go run .
 ```
 
-The command simulates a shipment sync failure (the kind that pages us at 3am). It sends the exception payload to `POST /v1/errors/capture` and prints `shipment-sync failure captured` after the envelope reports `ok: true`.
+The command simulates a shipment sync failure, sends the exception payload to `POST /v1/errors/capture`, and prints `shipment-sync failure captured` after the envelope reports `ok: true`.
 
 ## The request path
 
@@ -15,13 +15,13 @@ The command simulates a shipment sync failure (the kind that pages us at 3am). I
 
 1. Run the scheduled function.
 2. Capture the returned error with the job name and schedule in `context`.
-3. Use `shipment-sync` plus `scheduled-job` as the fingerprint, so repeated runs are easy to inspect together. This matters when a retry would otherwise create duplicate deliveries.
+3. Use `shipment-sync` plus `scheduled-job` as the fingerprint, so repeated runs are easy to inspect together.
 
-The small client uses `Authorization: Bearer <key>` from `INFRAI_API_KEY`, sets `POST` explicitly, reads `{ok, data, error, metadata}`, and returns the server error when `ok` is false. A client-generated `Idempotency-Key` stays the same across retries. That stable id is what keeps the capture idempotent. HTTP 429 responses wait for `Retry-After`, or use exponential backoff when that header is absent.
+The small client uses `Authorization: Bearer <key>` from `INFRAI_API_KEY`, sets `POST` explicitly, reads `{ok, data, error, metadata}`, and returns the server error when `ok` is false. A client-generated `Idempotency-Key` stays the same across retries. HTTP 429 responses wait for `Retry-After`, or use exponential backoff when that header is absent.
 
 ## Copy the client
 
-No SDK needed. The `infrai` Go package is a short standard-library client that can sit beside an existing worker. Change `runScheduledJob` to your real function and keep the capture call at the scheduler boundary. One key covers the Infrai API surface, while this example only calls `errors.capture`.
+There is no SDK dependency. The `infrai` package is a short standard-library client that can sit beside an existing worker. Change `runScheduledJob` to your real function and keep the capture call at the scheduler boundary. One key covers the Infrai API surface, while this example only calls `errors.capture`.
 
 ## Check it
 
@@ -29,7 +29,7 @@ No SDK needed. The `infrai` Go package is a short standard-library client that c
 go test ./...
 ```
 
-The test stays focused on the sample job: it must return an error for the capture path to run. If it succeeds, the page won't fire.
+The test stays focused on the sample job: it must return an error for the capture path to run.
 
 ## Before this ships: Scheduled Job Failure Surface
 
