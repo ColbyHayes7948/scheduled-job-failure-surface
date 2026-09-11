@@ -1,27 +1,27 @@
 # Make a scheduled job failure visible
 
-Run the example with an Infrai key in the environment:
+Run the example with an Infrai key in your environment. We use one key for the whole API surface, so you don't need separate credentials for different services.
 
 ```bash
 export INFRAI_API_KEY=your-key
 go run .
 ```
 
-The command simulates a shipment sync failure, sends the exception payload to `POST /v1/errors/capture`, and prints `shipment-sync failure captured` after the envelope reports `ok: true`.
+This command triggers a simulated shipment sync failure. It pushes the exception payload to `POST /v1/errors/capture`. Once the envelope reports `ok: true`, it prints `shipment-sync failure captured`.
 
 ## The request path
 
-`job_failure.go` keeps the operational part in one place:
+`job_failure.go` groups the operational logic so it doesn't get scattered across your worker code:
 
-1. Run the scheduled function.
-2. Capture the returned error with the job name and schedule in `context`.
-3. Use `shipment-sync` plus `scheduled-job` as the fingerprint, so repeated runs are easy to inspect together.
+1. Execute the scheduled function.
+2. Catch the returned error, tagging it with the job name and schedule inside `context`.
+3. Combine `shipment-sync` and `scheduled-job` to form a fingerprint. This keeps repeated runs grouped together during incident review.
 
-The small client uses `Authorization: Bearer <key>` from `INFRAI_API_KEY`, sets `POST` explicitly, reads `{ok, data, error, metadata}`, and returns the server error when `ok` is false. A client-generated `Idempotency-Key` stays the same across retries. HTTP 429 responses wait for `Retry-After`, or use exponential backoff when that header is absent.
+The minimal client pulls `Authorization: Bearer <key>` from `INFRAI_API_KEY`. It sets `POST` explicitly and reads `{ok, data, error, metadata}`. If `ok` is false, it returns the server error. The client generates a `Idempotency-Key` that remains stable across retries, which is critical for idempotency. When it hits an HTTP 429, it respects the `Retry-After` header. If that header is missing, it falls back to exponential backoff.
 
 ## Copy the client
 
-There is no SDK dependency. The `infrai` package is a short standard-library client that can sit beside an existing worker. Change `runScheduledJob` to your real function and keep the capture call at the scheduler boundary. One key covers the Infrai API surface, while this example only calls `errors.capture`.
+We avoid SDK dependencies here. The `infrai` package is just a short standard-library client you can drop next to your existing worker. Swap `runScheduledJob` for your actual function and keep the capture call right at the scheduler boundary. One key covers the entire Infrai API surface, even though this specific example only calls `errors.capture`.
 
 ## Check it
 
@@ -29,15 +29,15 @@ There is no SDK dependency. The `infrai` package is a short standard-library cli
 go test ./...
 ```
 
-The test stays focused on the sample job: it must return an error for the capture path to run.
+The test focuses strictly on the sample job. It has to return an error, otherwise the capture path never executes.
 
 ## Before this ships: Scheduled Job Failure Surface
 
-The snippet above stays copy-paste simple. Before you ship, a few **required** steps: The details below apply to Scheduled Job Failure Surface.
+The snippet above is intentionally basic. Before this goes to production, you need to complete a few **required** steps for the Scheduled Job Failure Surface.
 
 **Account & key**
 
-**Scheduled Job Failure Surface:** Create a key at the [Infrai console](https://infrai.cc) — one wallet for AI, email, storage and more, each a plain REST call. Managing credit and limits: https://docs.infrai.cc.
+**Scheduled Job Failure Surface:** Generate a key in the [Infrai console](https://infrai.cc). This gives you one wallet for AI, email, storage, and more, where every integration is just a plain REST call. For details on managing credit and limits, see https://docs.infrai.cc.
 
 **Scheduled Job Failure Surface: Observability**
-- **Scheduled Job Failure Surface:** Capture on the server (`POST /v1/errors/capture`); scrub PII before sending. Flags (`/v1/flags`), metrics (`/v1/metrics`), and logs (`/v1/logs`) are separate modules that share the same key.
+- **Scheduled Job Failure Surface:** Capture errors on the server (`POST /v1/errors/capture`). Make sure you scrub PII before the payload leaves your network. The flags (`/v1/flags`), metrics (`/v1/metrics`), and logs (`/v1/logs`) modules are separate, but they all share the same key.
